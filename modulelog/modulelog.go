@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/jacobsa/go-serial/serial"
 )
@@ -33,6 +34,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("port.Read: %v", err)
 		}
-		fmt.Print(string(buf[:n]))
+		line := string(buf[:n])
+		fmt.Print(line)
+		if strings.HasPrefix(line, "$") {
+			line = line[1:]
+			fields := line.Split(line, ";")
+			fmt.Printf(fields)
+		}
 	}
 }
