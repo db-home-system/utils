@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -30,37 +32,52 @@ type PostMsg struct {
 	Temppressure int       `json:"temppressure"`
 }
 
+var (
+	debug   = flag.Bool("debug", false, "Send fake post to server")
+	url     = flag.String("url", "http://radiolog.asterix.cloud/import", "Server post url")
+	postRow = flag.String("postRow", "$13;50;180;733978;2600;1300;906;904;0;1016342;701;", "Data row to post")
+)
+
 func main() {
-	// Set up options.
-	options := serial.OpenOptions{
-		PortName:        "/dev/ttyS2",
-		BaudRate:        115200,
-		DataBits:        8,
-		StopBits:        1,
-		MinimumReadSize: 1,
-	}
+	flag.Parse()
+	var port io.ReadWriteCloser
+	var err error
+	if !*debug {
+		// Set up options.
+		options := serial.OpenOptions{
+			PortName:        "/dev/ttyS2",
+			BaudRate:        115200,
+			DataBits:        8,
+			StopBits:        1,
+			MinimumReadSize: 1,
+		}
 
-	// Open the port.
-	port, err := serial.Open(options)
-	if err != nil {
-		fmt.Println("serial.Open: %v", err)
+		// Open the port.
+		port, err = serial.Open(options)
+		if err != nil {
+			fmt.Println("serial.Open: %v", err)
+		}
+		// Make sure to close it later.
+		defer port.Close()
 	}
-
-	// Make sure to close it later.
-	defer port.Close()
 
 	for {
+
 		line := ""
-		for {
-			buf := make([]byte, 1)
-			n, err := port.Read(buf)
-			if err != nil {
-				fmt.Println("port.Read: %v", err)
+		if !*debug {
+			for {
+				buf := make([]byte, 1)
+				n, err := port.Read(buf)
+				if err != nil {
+					fmt.Println("port.Read: %v", err)
+				}
+				if string(buf[:n]) == "\n" {
+					break
+				}
+				line = line + string(buf[:n])
 			}
-			if string(buf[:n]) == "\n" {
-				break
-			}
-			line = line + string(buf[:n])
+		} else {
+			line = *postRow
 		}
 
 		var loc *time.Location
@@ -116,10 +133,8 @@ func main() {
 			}
 
 			jsonData, _ := json.Marshal(postData)
-			req, err := http.NewRequest("POST", "http://radiolog.asterix.cloud/import", bytes.NewBuffer(jsonData))
-
-			//fmt.Println(t, "URL:>", url)
-			//fmt.Println(string(jsonData))
+			fmt.Println(*url)
+			req, err := http.NewRequest("POST", *url, bytes.NewBuffer(jsonData))
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
